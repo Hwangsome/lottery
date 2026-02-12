@@ -1,0 +1,14 @@
+# Maven / Java build output
+target/
+**/target/
+
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+
+# Logs
+logs/
+*.log

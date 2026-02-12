@@ -1,0 +1,58 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: lottery-admin
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/lottery?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:root123456}
+    type: com.alibaba.druid.pool.DruidDataSource
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis123456}
+      timeout: 3000ms
+
+# MyBatis Plus 配置
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.clinic.lottery.admin.entity
+  configuration:
+    map-underscore-to-camel-case: true
+
+# Dubbo 配置
+dubbo:
+  application:
+    name: lottery-admin
+    service-discovery:
+      migration: FORCE_INTERFACE
+  registry:
+    address: nacos://${NACOS_SERVER:localhost:8848}
+    username: ${NACOS_USERNAME:nacos}
+    password: ${NACOS_PASSWORD:nacos}
+  protocol:
+    name: dubbo
+    port: 20887
+  consumer:
+    check: false
+    timeout: 5000
+
+# Knife4j 配置
+knife4j:
+  enable: true
+
+# 日志配置
+logging:
+  level:
+    com.clinic.lottery: DEBUG

@@ -1,0 +1,88 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: lottery-auth
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+      config:
+        server-addr: ${NACOS_SERVER:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        file-extension: yml
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/lottery?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:root123456}
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      initial-size: 5
+      min-idle: 5
+      max-active: 20
+      max-wait: 60000
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis123456}
+      timeout: 3000ms
+
+# MyBatis Plus 配置
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.clinic.lottery.auth.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# Dubbo 配置
+dubbo:
+  application:
+    name: lottery-auth
+    service-discovery:
+      migration: FORCE_INTERFACE
+  registry:
+    address: nacos://${NACOS_SERVER:localhost:8848}
+    username: ${NACOS_USERNAME:nacos}
+    password: ${NACOS_PASSWORD:nacos}
+  protocol:
+    name: dubbo
+    port: 20881
+  consumer:
+    check: false
+    timeout: 5000
+
+# JWT 配置
+jwt:
+  secret: ${JWT_SECRET:lottery-secret-key-must-be-at-least-32-characters-long}
+  expire-seconds: 604800
+
+# 微信小程序配置
+wechat:
+  appid: ${WECHAT_APPID:wx0b82f5512f3ecddf}
+  secret: ${WECHAT_SECRET:14e4bf2bc70fce76126ce9519549060f}
+
+# Knife4j 配置
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+# 日志配置
+logging:
+  level:
+    com.clinic.lottery: DEBUG

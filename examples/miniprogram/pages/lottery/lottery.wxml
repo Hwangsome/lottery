@@ -1,0 +1,27 @@
+<view class="page">
+  <view class="wheel-box">
+    <view class="pointer"></view>
+
+    <view class="wheel-outer">
+      <view
+        class="wheel-rotator"
+        style="transform: rotate({{wheelDeg}}deg); transition: transform {{transitionMs}}ms cubic-bezier(0.18, 0.89, 0.32, 1);"
+      >
+        <canvas
+          class="wheel-canvas"
+          canvas-id="wheelCanvas"
+          width="{{canvasSize}}"
+          height="{{canvasSize}}"
+        ></canvas>
+      </view>
+
+      <button class="center-btn" bindtap="onTapSpin" disabled="{{spinning || chances <= 0}}">
+        {{spinning ? '抽奖中' : '抽奖'}}
+      </button>
+    </view>
+  </view>
+
+  <button class="state-btn" bindtap="onTapSpin" disabled="{{spinning || chances <= 0}}">
+    {{chances > 0 ? ('立即抽奖（剩余' + chances + '次）') : '次数不足'}}
+  </button>
+</view>

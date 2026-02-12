@@ -1,0 +1,10 @@
+.git
+.idea
+.claude
+**/.DS_Store
+
+# 仅保留构建镜像所需的 jar，其它 target 内容忽略
+**/target/*
+!**/target/*.jar
+
+examples/

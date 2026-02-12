@@ -1,0 +1,55 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: lottery-notify
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
+    consumer:
+      group-id: lottery-notify-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring:
+          json:
+            trusted:
+              packages: "com.clinic.lottery.api.dto,com.clinic.lottery.prize.entity"
+
+# Dubbo 配置
+dubbo:
+  application:
+    name: lottery-notify
+    service-discovery:
+      migration: FORCE_INTERFACE
+  registry:
+    address: nacos://${NACOS_SERVER:localhost:8848}
+    username: ${NACOS_USERNAME:nacos}
+    password: ${NACOS_PASSWORD:nacos}
+  protocol:
+    name: dubbo
+    port: 20886
+  consumer:
+    check: false
+    timeout: 5000
+
+# Knife4j 配置
+knife4j:
+  enable: true
+
+# 微信配置
+wechat:
+  appid: ${WECHAT_APPID:your-appid}
+  secret: ${WECHAT_SECRET:your-secret}
+
+# 日志配置
+logging:
+  level:
+    com.clinic.lottery: DEBUG

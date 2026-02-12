@@ -1,0 +1,106 @@
+page {
+  background: #d7e0de;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 48rpx 0 72rpx;
+  box-sizing: border-box;
+}
+
+.wheel-box {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  position: relative;
+}
+
+.wheel-outer {
+  width: 640rpx;
+  height: 640rpx;
+  border-radius: 50%;
+  background: #f2f3ee;
+  box-shadow: 0 18rpx 36rpx rgba(60, 72, 68, 0.14);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wheel-rotator {
+  width: 600rpx;
+  height: 600rpx;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.wheel-canvas {
+  width: 600rpx;
+  height: 600rpx;
+  border-radius: 50%;
+}
+
+.pointer {
+  width: 0;
+  height: 0;
+  border-left: 16rpx solid transparent;
+  border-right: 16rpx solid transparent;
+  border-top: 28rpx solid #f3a204;
+  position: absolute;
+  top: -8rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+}
+
+.center-btn {
+  width: 132rpx;
+  height: 132rpx;
+  border-radius: 50%;
+  background: #f3a204;
+  color: #fff;
+  font-size: 34rpx;
+  font-weight: 700;
+  line-height: 132rpx;
+  text-align: center;
+  padding: 0;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 7;
+  border: 0;
+}
+
+.center-btn::after {
+  border: 0;
+}
+
+.center-btn[disabled] {
+  background: #c1b8a1;
+  color: #f2efe7;
+}
+
+.state-btn {
+  margin: 52rpx auto 0;
+  width: 300rpx;
+  height: 84rpx;
+  border-radius: 42rpx;
+  background: #cfd9d7;
+  color: #4f6d70;
+  font-size: 36rpx;
+  font-weight: 700;
+  line-height: 84rpx;
+  text-align: center;
+  padding: 0 20rpx;
+  border: 0;
+}
+
+.state-btn::after {
+  border: 0;
+}
+
+.state-btn[disabled] {
+  background: #d2dcd9;
+  color: #6c8788;
+}

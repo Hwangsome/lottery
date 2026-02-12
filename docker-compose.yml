@@ -1,0 +1,484 @@
+services:
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: lottery-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_DATABASE: lottery
+      TZ: Asia/Shanghai
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./sql/nacos-mysql.sql:/docker-entrypoint-initdb.d/nacos-mysql.sql:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lottery-network
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: lottery-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass redis123456
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis123456", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lottery-network
+
+  # Nacos 服务发现与配置中心
+  nacos:
+    image: nacos/nacos-server:v2.3.0
+    container_name: lottery-nacos
+    restart: always
+    environment:
+      MODE: standalone
+      SPRING_DATASOURCE_PLATFORM: mysql
+      MYSQL_SERVICE_HOST: mysql
+      MYSQL_SERVICE_PORT: 3306
+      MYSQL_SERVICE_DB_NAME: nacos
+      MYSQL_SERVICE_USER: root
+      MYSQL_SERVICE_PASSWORD: root123456
+      NACOS_AUTH_ENABLE: "true"
+      NACOS_AUTH_TOKEN: SecretKey012345678901234567890123456789012345678901234567890123456789
+      NACOS_AUTH_IDENTITY_KEY: serverIdentity
+      NACOS_AUTH_IDENTITY_VALUE: security
+      JVM_XMS: 64m
+      JVM_XMX: 128m
+      JVM_XMN: 64m
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+      - "9849:9849"
+    volumes:
+      - nacos_data:/home/nacos/data
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/readiness"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - lottery-network
+
+  # Zookeeper (Kafka 依赖)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: lottery-zookeeper
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    networks:
+      - lottery-network
+
+  # Kafka 消息队列
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: lottery-kafka
+    restart: always
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - lottery-network
+
+  # Kafka UI (可选，用于管理 Kafka)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: lottery-kafka-ui
+    restart: always
+    depends_on:
+      - kafka
+    ports:
+      - "9093:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: lottery-kafka
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    networks:
+      - lottery-network
+
+  # Lottery 微服务
+
+  # API 网关
+  lottery-gateway:
+    build:
+      context: .
+      dockerfile: lottery-gateway/Dockerfile
+    image: lottery-gateway:1.0.0-SNAPSHOT
+    container_name: lottery-gateway
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED: "false"
+      NACOS_SERVER: nacos:8848
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: nacos
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: root123456
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123456
+      KAFKA_SERVERS: kafka:29092
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - lottery-network
+
+  # 认证服务
+  lottery-auth:
+    build:
+      context: .
+      dockerfile: lottery-auth/Dockerfile
+    image: lottery-auth:1.0.0-SNAPSHOT
+    container_name: lottery-auth
+    restart: always
+    ports:
+      - "8081:8080"
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED: "false"
+      NACOS_SERVER: nacos:8848
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: nacos
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: root123456
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123456
+      KAFKA_SERVERS: kafka:29092
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v3/api-docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - lottery-network
+
+  # 用户服务
+  lottery-user:
+    build:
+      context: .
+      dockerfile: lottery-user/Dockerfile
+    image: lottery-user:1.0.0-SNAPSHOT
+    container_name: lottery-user
+    restart: always
+    ports:
+      - "8082:8080"
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED: "false"
+      NACOS_SERVER: nacos:8848
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: nacos
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: root123456
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123456
+      KAFKA_SERVERS: kafka:29092
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v3/api-docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - lottery-network
+
+  # 活动服务
+  lottery-activity:
+    build:
+      context: .
+      dockerfile: lottery-activity/Dockerfile
+    image: lottery-activity:1.0.0-SNAPSHOT
+    container_name: lottery-activity
+    restart: always
+    ports:
+      - "8083:8080"
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED: "false"
+      NACOS_SERVER: nacos:8848
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: nacos
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: root123456
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123456
+      KAFKA_SERVERS: kafka:29092
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v3/api-docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - lottery-network
+
+  # 奖品服务
+  lottery-prize:
+    build:
+      context: .
+      dockerfile: lottery-prize/Dockerfile
+    image: lottery-prize:1.0.0-SNAPSHOT
+    container_name: lottery-prize
+    restart: always
+    ports:
+      - "8084:8080"
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED: "false"
+      NACOS_SERVER: nacos:8848
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: nacos
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: root123456
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123456
+      KAFKA_SERVERS: kafka:29092
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v3/api-docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - lottery-network
+
+  # 积分服务
+  lottery-points:
+    build:
+      context: .
+      dockerfile: lottery-points/Dockerfile
+    image: lottery-points:1.0.0-SNAPSHOT
+    container_name: lottery-points
+    restart: always
+    ports:
+      - "8085:8080"
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED: "false"
+      NACOS_SERVER: nacos:8848
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: nacos
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: root123456
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123456
+      KAFKA_SERVERS: kafka:29092
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v3/api-docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - lottery-network
+
+  # 通知服务
+  lottery-notify:
+    build:
+      context: .
+      dockerfile: lottery-notify/Dockerfile
+    image: lottery-notify:1.0.0-SNAPSHOT
+    container_name: lottery-notify
+    restart: always
+    ports:
+      - "8086:8080"
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED: "false"
+      NACOS_SERVER: nacos:8848
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: nacos
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: root123456
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123456
+      KAFKA_SERVERS: kafka:29092
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v3/api-docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - lottery-network
+
+  # 管理服务
+  lottery-admin:
+    build:
+      context: .
+      dockerfile: lottery-admin/Dockerfile
+    image: lottery-admin:1.0.0-SNAPSHOT
+    container_name: lottery-admin
+    restart: always
+    ports:
+      - "8087:8080"
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED: "false"
+      NACOS_SERVER: nacos:8848
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: nacos
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: root123456
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123456
+      KAFKA_SERVERS: kafka:29092
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v3/api-docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - lottery-network
+
+volumes:
+  mysql_data:
+  redis_data:
+  nacos_data:
+  zookeeper_data:
+  zookeeper_log:
+  kafka_data:
+
+networks:
+  lottery-network:
+    driver: bridge

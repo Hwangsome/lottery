@@ -1,0 +1,181 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: lottery-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+      config:
+        server-addr: ${NACOS_SERVER:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        file-extension: yml
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        # 认证服务 - 登录接口（无需鉴权）
+        - id: auth-login
+          uri: http://lottery-auth:8080
+          predicates:
+            - Path=/api/v1/user/login, /api/v1/admin/login
+          filters:
+            - StripPrefix=0
+
+        # 活动服务 - 获取活动信息（无需鉴权）
+        - id: activity-public
+          uri: http://lottery-activity:8080
+          predicates:
+            - Path=/api/v1/lottery/activity
+          filters:
+            - StripPrefix=0
+
+        # 用户服务（鉴权由 Spring Security 统一处理）
+        - id: user-service
+          uri: http://lottery-user:8080
+          predicates:
+            - Path=/api/v1/user/**
+          filters:
+            - StripPrefix=0
+
+        # 抽奖服务
+        - id: lottery-service
+          uri: http://lottery-prize:8080
+          predicates:
+            - Path=/api/v1/lottery/**
+          filters:
+            - StripPrefix=0
+            - name: RateLimitFilter
+
+        # 积分服务
+        - id: points-service
+          uri: http://lottery-points:8080
+          predicates:
+            - Path=/api/v1/points/**
+          filters:
+            - StripPrefix=0
+
+        # 核销服务（鉴权由 Spring Security 统一处理）
+        - id: verify-service
+          uri: http://lottery-prize:8080
+          predicates:
+            - Path=/api/v1/verify/**
+          filters:
+            - StripPrefix=0
+
+        # 管理后台服务
+        - id: admin-service
+          uri: http://lottery-admin:8080
+          predicates:
+            - Path=/api/v1/admin/**
+          filters:
+            - StripPrefix=0
+
+        # OpenAPI 文档代理（给网关 Swagger 聚合使用）
+        - id: auth-docs
+          uri: http://lottery-auth:8080
+          predicates:
+            - Path=/api-docs/auth/**
+          filters:
+            - RewritePath=/api-docs/auth/?(?<segment>.*), /$\{segment}
+
+        - id: user-docs
+          uri: http://lottery-user:8080
+          predicates:
+            - Path=/api-docs/user/**
+          filters:
+            - RewritePath=/api-docs/user/?(?<segment>.*), /$\{segment}
+
+        - id: activity-docs
+          uri: http://lottery-activity:8080
+          predicates:
+            - Path=/api-docs/activity/**
+          filters:
+            - RewritePath=/api-docs/activity/?(?<segment>.*), /$\{segment}
+
+        - id: prize-docs
+          uri: http://lottery-prize:8080
+          predicates:
+            - Path=/api-docs/prize/**
+          filters:
+            - RewritePath=/api-docs/prize/?(?<segment>.*), /$\{segment}
+
+        - id: points-docs
+          uri: http://lottery-points:8080
+          predicates:
+            - Path=/api-docs/points/**
+          filters:
+            - RewritePath=/api-docs/points/?(?<segment>.*), /$\{segment}
+
+        - id: notify-docs
+          uri: http://lottery-notify:8080
+          predicates:
+            - Path=/api-docs/notify/**
+          filters:
+            - RewritePath=/api-docs/notify/?(?<segment>.*), /$\{segment}
+
+        - id: admin-docs
+          uri: http://lottery-admin:8080
+          predicates:
+            - Path=/api-docs/admin/**
+          filters:
+            - RewritePath=/api-docs/admin/?(?<segment>.*), /$\{segment}
+
+      default-filters:
+        - name: RequestLog
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis123456}
+      timeout: 3000ms
+
+# JWT 配置
+jwt:
+  secret: ${JWT_SECRET:lottery-secret-key-must-be-at-least-32-characters-long}
+  expire-seconds: 604800
+
+# Gateway Swagger 聚合
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    disable-swagger-default-url: true
+    urls:
+      - name: lottery-auth
+        url: /api-docs/auth/v3/api-docs
+      - name: lottery-user
+        url: /api-docs/user/v3/api-docs
+      - name: lottery-activity
+        url: /api-docs/activity/v3/api-docs
+      - name: lottery-prize
+        url: /api-docs/prize/v3/api-docs
+      - name: lottery-points
+        url: /api-docs/points/v3/api-docs
+      - name: lottery-notify
+        url: /api-docs/notify/v3/api-docs
+      - name: lottery-admin
+        url: /api-docs/admin/v3/api-docs
+
+# 日志配置
+logging:
+  level:
+    com.clinic.lottery: DEBUG
+    org.springframework.cloud.gateway: DEBUG
+
+# 管理端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: always
